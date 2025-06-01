@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>パンダのドット絵風</title>
+  <style>
+    canvas {
+      image-rendering: pixelated;
+      background: #ffffff;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas" width="160" height="160"></canvas>
+
+  <script>
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+
+    const scale = 4;
+
+    // パンダの体
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(6 * scale, 10 * scale, 10 * scale, 12 * scale);  // 体
+
+    // 耳
+    ctx.fillStyle = "#000000";
+    ctx.beginPath();
+    ctx.arc(6 * scale, 5 * scale, 3 * scale, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(15 * scale, 5 * scale, 3 * scale, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 目（サングラス）
+    ctx.fillRect(7 * scale, 8 * scale, 3 * scale, 1 * scale); // 左
+    ctx.fillRect(11 * scale, 8 * scale, 3 * scale, 1 * scale); // 右
+
+    // 口・牙
+    ctx.fillStyle = "#000000";
+    ctx.beginPath();
+    ctx.moveTo(10 * scale, 12 * scale);
+    ctx.lineTo(9 * scale, 14 * scale);
+    ctx.lineTo(10 * scale, 13 * scale);
+    ctx.lineTo(11 * scale, 14 * scale);
+    ctx.lineTo(10 * scale, 12 * scale);
+    ctx.fill();
+
+    // 手
+    ctx.fillRect(4 * scale, 12 * scale, 2 * scale, 1 * scale); // 左手
+    ctx.fillRect(14 * scale, 11 * scale, 2 * scale, 1 * scale); // 右手
+
+    // 足
+    ctx.fillRect(7 * scale, 21 * scale, 2 * scale, 2 * scale); // 左足
+    ctx.fillRect(11 * scale, 21 * scale, 2 * scale, 2 * scale); // 右足
+  </script>
+</body>
+</html>

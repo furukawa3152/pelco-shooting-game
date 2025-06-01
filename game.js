@@ -5,15 +5,41 @@ const scoreElement = document.getElementById('score');
 const gameOverElement = document.getElementById('gameOver');
 const finalScoreElement = document.getElementById('finalScore');
 
+// 画像読み込み
+const playerImage = new Image();
+playerImage.src = 'jiki.png';
+const bossImage = new Image();
+bossImage.src = 'pile.png';
+
+// 画像が読み込まれるまで待機
+let imagesLoaded = 0;
+const totalImages = 2;
+
+playerImage.onload = () => {
+    imagesLoaded++;
+    if (imagesLoaded === totalImages) {
+        gameLoop();
+    }
+};
+
+bossImage.onload = () => {
+    imagesLoaded++;
+    if (imagesLoaded === totalImages) {
+        gameLoop();
+    }
+};
+
 // ゲーム状態
 let gameRunning = true;
 let score = 0;
 let keys = {};
 let enemies = [];
 let bullets = [];
+let items = []; // アイテム配列を追加
 let boss = null;
 let bossDefeated = false;
 let gameOverTimer = 0;
+let shootTimer = 0; // 連射用タイマーを追加
 
 // プレイヤー設定
 const player = {
@@ -22,7 +48,17 @@ const player = {
     width: 60,
     height: 60,
     speed: 5,
-    health: 3
+    health: 3,
+    maxHealth: 5, // 最大ライフを追加
+    weaponType: 'normal', // 武器タイプ: 'normal', 'triple', 'laser'
+    weaponTimer: 0 // 武器効果の残り時間
+};
+
+// アイテムタイプ
+const ItemTypes = {
+    HEALTH: 'health',
+    TRIPLE_SHOT: 'triple',
+    LASER: 'laser'
 };
 
 // ボス設定
@@ -38,6 +74,7 @@ class Boss {
         this.direction = 1;
         this.attackTimer = 0;
         this.hammerSwing = 0;
+        this.attackPattern = 0;
     }
     
     update() {
@@ -49,76 +86,69 @@ class Boss {
         
         // 攻撃パターン
         this.attackTimer++;
-        if (this.attackTimer > 60) {
+        if (this.attackTimer > 30) {
             this.attack();
             this.attackTimer = 0;
+            this.attackPattern = (this.attackPattern + 1) % 3;
         }
         
         this.hammerSwing = Math.sin(Date.now() * 0.01) * 20;
     }
     
     attack() {
-        // ボスから弾を発射
-        for (let i = 0; i < 3; i++) {
-            enemies.push({
-                x: this.x + this.width / 2 + (i - 1) * 30,
-                y: this.y + this.height,
-                width: 15,
-                height: 15,
-                speed: 3,
-                type: 'bossBullet'
-            });
+        // 攻撃パターンによって異なる攻撃
+        if (this.attackPattern === 0) {
+            // パターン1: 扇形攻撃（5発）
+            for (let i = 0; i < 5; i++) {
+                const angle = (i - 2) * 0.3;
+                enemies.push({
+                    x: this.x + this.width / 2,
+                    y: this.y + this.height,
+                    width: 15,
+                    height: 15,
+                    speed: 4,
+                    speedX: Math.sin(angle) * 3,
+                    speedY: Math.cos(angle) * 4,
+                    type: 'bossBullet'
+                });
+            }
+        } else if (this.attackPattern === 1) {
+            // パターン2: 直線攻撃（4発連射）
+            for (let i = 0; i < 4; i++) {
+                enemies.push({
+                    x: this.x + this.width / 2 + (i - 1.5) * 20,
+                    y: this.y + this.height,
+                    width: 15,
+                    height: 15,
+                    speed: 5,
+                    speedX: 0,
+                    speedY: 5,
+                    type: 'bossBullet'
+                });
+            }
+        } else {
+            // パターン3: ランダム攻撃（10発）
+            for (let i = 0; i < 10; i++) {
+                const randomAngle = (Math.random() - 0.5) * Math.PI;
+                enemies.push({
+                    x: this.x + this.width / 2 + (Math.random() - 0.5) * this.width,
+                    y: this.y + this.height,
+                    width: 12,
+                    height: 12,
+                    speed: 3 + Math.random() * 3,
+                    speedX: Math.sin(randomAngle) * 2,
+                    speedY: Math.cos(randomAngle) * 3 + 2,
+                    type: 'bossBullet'
+                });
+            }
         }
     }
     
     draw() {
         ctx.save();
         
-        // ボスパンダの体
-        ctx.fillStyle = '#000';
-        ctx.fillRect(this.x + 20, this.y + 40, this.width - 40, this.height - 40);
-        
-        // ボスパンダの頭
-        ctx.fillStyle = '#FFF';
-        ctx.beginPath();
-        ctx.arc(this.x + this.width / 2, this.y + 30, 35, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // 耳
-        ctx.fillStyle = '#000';
-        ctx.beginPath();
-        ctx.arc(this.x + this.width / 2 - 25, this.y + 15, 15, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(this.x + this.width / 2 + 25, this.y + 15, 15, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // サングラス
-        ctx.fillStyle = '#333';
-        ctx.fillRect(this.x + this.width / 2 - 30, this.y + 20, 60, 20);
-        ctx.fillStyle = '#000';
-        ctx.fillRect(this.x + this.width / 2 - 25, this.y + 25, 20, 10);
-        ctx.fillRect(this.x + this.width / 2 + 5, this.y + 25, 20, 10);
-        
-        // 鼻
-        ctx.fillStyle = '#000';
-        ctx.beginPath();
-        ctx.arc(this.x + this.width / 2, this.y + 35, 3, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // 手とピコピコハンマー
-        ctx.strokeStyle = '#8B4513';
-        ctx.lineWidth = 8;
-        ctx.beginPath();
-        ctx.moveTo(this.x + this.width / 2 + 40, this.y + 60);
-        ctx.lineTo(this.x + this.width / 2 + 50 + this.hammerSwing, this.y + 40);
-        ctx.stroke();
-        
-        // ハンマーヘッド
-        ctx.fillStyle = '#FF69B4';
-        ctx.fillRect(this.x + this.width / 2 + 45 + this.hammerSwing, this.y + 30, 20, 20);
-        ctx.fillStyle = '#FFB6C1';
-        ctx.fillRect(this.x + this.width / 2 + 48 + this.hammerSwing, this.y + 33, 14, 14);
+        // ボス画像を描画
+        ctx.drawImage(bossImage, this.x, this.y, this.width, this.height);
         
         // ヘルスバー
         ctx.fillStyle = '#FF0000';
@@ -148,64 +178,85 @@ function spawnEnemy() {
             width: 40,
             height: 40,
             speed: 2 + Math.random() * 2,
-            type: 'normal'
+            type: 'normal',
+            rotation: 0
         });
     }
 }
 
-// 弾丸発射
+// アイテム生成
+function spawnItem() {
+    // ランダムでアイテム生成（確率は低めに）
+    if (Math.random() < 0.005) { // 0.5%の確率
+        const itemTypes = Object.values(ItemTypes);
+        const randomType = itemTypes[Math.floor(Math.random() * itemTypes.length)];
+        
+        items.push({
+            x: Math.random() * (canvas.width - 40),
+            y: -40,
+            width: 30,
+            height: 30,
+            speed: 1.5,
+            type: randomType
+        });
+    }
+}
+
+// 弾丸発射（武器タイプ対応）
 function shootBullet() {
-    bullets.push({
-        x: player.x + player.width / 2 - 3,
-        y: player.y,
-        width: 6,
-        height: 12,
-        speed: 8
-    });
+    if (player.weaponType === 'normal') {
+        // 通常弾
+        bullets.push({
+            x: player.x + player.width / 2 - 3,
+            y: player.y,
+            width: 6,
+            height: 12,
+            speed: 8,
+            type: 'normal'
+        });
+    } else if (player.weaponType === 'triple') {
+        // 3方向弾
+        for (let i = -1; i <= 1; i++) {
+            bullets.push({
+                x: player.x + player.width / 2 - 3,
+                y: player.y,
+                width: 6,
+                height: 12,
+                speed: 8,
+                speedX: i * 2, // 横方向の速度
+                speedY: 8,
+                type: 'triple'
+            });
+        }
+    } else if (player.weaponType === 'laser') {
+        // レーザー（太くて高威力）
+        bullets.push({
+            x: player.x + player.width / 2 - 6,
+            y: player.y,
+            width: 12,
+            height: 25,
+            speed: 12,
+            type: 'laser',
+            damage: 2 // 2倍ダメージ
+        });
+    }
 }
 
 // プレイヤー描画
 function drawPlayer() {
     ctx.save();
     
-    // プレイヤーパンダの体
-    ctx.fillStyle = '#FFF';
-    ctx.beginPath();
-    ctx.arc(player.x + player.width / 2, player.y + player.height / 2, 25, 0, Math.PI * 2);
-    ctx.fill();
+    // プレイヤー画像を描画
+    ctx.drawImage(playerImage, player.x, player.y, player.width, player.height);
     
-    // 耳
-    ctx.fillStyle = '#000';
-    ctx.beginPath();
-    ctx.arc(player.x + player.width / 2 - 18, player.y + 15, 10, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(player.x + player.width / 2 + 18, player.y + 15, 10, 0, Math.PI * 2);
-    ctx.fill();
+    // デバッグ用：当たり判定の範囲を表示（半透明の赤い円）
+    const playerCenterX = player.x + player.width / 2;
+    const playerCenterY = player.y + player.height / 2;
+    const hitboxSize = 20;
     
-    // 目
-    ctx.fillStyle = '#000';
+    ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
     ctx.beginPath();
-    ctx.arc(player.x + player.width / 2 - 8, player.y + 25, 4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(player.x + player.width / 2 + 8, player.y + 25, 4, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // 鼻
-    ctx.fillStyle = '#000';
-    ctx.beginPath();
-    ctx.arc(player.x + player.width / 2, player.y + 30, 2, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // 可愛い頬の赤み
-    ctx.fillStyle = '#FFB6C1';
-    ctx.globalAlpha = 0.6;
-    ctx.beginPath();
-    ctx.arc(player.x + player.width / 2 - 20, player.y + 35, 6, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(player.x + player.width / 2 + 20, player.y + 35, 6, 0, Math.PI * 2);
+    ctx.arc(playerCenterX, playerCenterY, hitboxSize / 2, 0, Math.PI * 2);
     ctx.fill();
     
     ctx.restore();
@@ -220,45 +271,137 @@ function drawEnemies() {
             ctx.arc(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, enemy.width / 2, 0, Math.PI * 2);
             ctx.fill();
         } else {
-            // 小さな敵パンダ
-            ctx.fillStyle = '#888';
+            // ピコピコハンマー
+            ctx.save();
+            
+            // 中心点に移動して回転
+            ctx.translate(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
+            ctx.rotate(enemy.rotation);
+            
+            // ハンマーの柄
+            ctx.strokeStyle = '#8B4513';
+            ctx.lineWidth = 6;
             ctx.beginPath();
-            ctx.arc(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, 15, 0, Math.PI * 2);
+            ctx.moveTo(0, -15);
+            ctx.lineTo(0, 15);
+            ctx.stroke();
+            
+            // ハンマーヘッド（ピンク）
+            ctx.fillStyle = '#FF69B4';
+            ctx.fillRect(-12, -18, 24, 12);
+            
+            // ハンマーヘッドのハイライト
+            ctx.fillStyle = '#FFB6C1';
+            ctx.fillRect(-10, -16, 20, 8);
+            
+            // 可愛い星マーク
+            ctx.fillStyle = '#FFD700';
+            ctx.beginPath();
+            for (let i = 0; i < 5; i++) {
+                const angle = (i * 4 * Math.PI) / 5;
+                const x = Math.cos(angle) * 4;
+                const y = Math.sin(angle) * 4 - 12;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.closePath();
             ctx.fill();
             
-            // 敵の耳
-            ctx.fillStyle = '#555';
-            ctx.beginPath();
-            ctx.arc(enemy.x + enemy.width / 2 - 10, enemy.y + 10, 6, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.beginPath();
-            ctx.arc(enemy.x + enemy.width / 2 + 10, enemy.y + 10, 6, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.restore();
             
-            // 怒った表情
-            ctx.fillStyle = '#FF0000';
-            ctx.beginPath();
-            ctx.arc(enemy.x + enemy.width / 2 - 5, enemy.y + 20, 2, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.beginPath();
-            ctx.arc(enemy.x + enemy.width / 2 + 5, enemy.y + 20, 2, 0, Math.PI * 2);
-            ctx.fill();
+            // 回転を更新
+            enemy.rotation += 0.2;
         }
+    });
+}
+
+// アイテム描画
+function drawItems() {
+    items.forEach(item => {
+        ctx.save();
+        
+        // アイテムの種類に応じて色と形を変更
+        if (item.type === ItemTypes.HEALTH) {
+            // ライフ回復（赤いハート）
+            ctx.fillStyle = '#FF69B4';
+            ctx.beginPath();
+            ctx.arc(item.x + item.width / 2 - 5, item.y + 8, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(item.x + item.width / 2 + 5, item.y + 8, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillRect(item.x + item.width / 2 - 10, item.y + 5, 20, 15);
+            
+            // ハート型の下部
+            ctx.beginPath();
+            ctx.moveTo(item.x + item.width / 2, item.y + 25);
+            ctx.lineTo(item.x + item.width / 2 - 10, item.y + 15);
+            ctx.lineTo(item.x + item.width / 2 + 10, item.y + 15);
+            ctx.closePath();
+            ctx.fill();
+            
+        } else if (item.type === ItemTypes.TRIPLE_SHOT) {
+            // 3方向攻撃（青い三角）
+            ctx.fillStyle = '#4169E1';
+            ctx.beginPath();
+            ctx.moveTo(item.x + item.width / 2, item.y);
+            ctx.lineTo(item.x, item.y + item.height);
+            ctx.lineTo(item.x + item.width, item.y + item.height);
+            ctx.closePath();
+            ctx.fill();
+            
+            // 3つの矢印マーク
+            ctx.strokeStyle = '#FFF';
+            ctx.lineWidth = 2;
+            for (let i = -1; i <= 1; i++) {
+                ctx.beginPath();
+                ctx.moveTo(item.x + item.width / 2 + i * 6, item.y + 10);
+                ctx.lineTo(item.x + item.width / 2 + i * 6, item.y + 20);
+                ctx.stroke();
+            }
+            
+        } else if (item.type === ItemTypes.LASER) {
+            // レーザー（黄色い四角）
+            ctx.fillStyle = '#FFD700';
+            ctx.fillRect(item.x, item.y, item.width, item.height);
+            
+            // レーザーエフェクト
+            ctx.fillStyle = '#FFF';
+            ctx.fillRect(item.x + 5, item.y + 5, item.width - 10, item.height - 10);
+            
+            // L字マーク
+            ctx.fillStyle = '#FF0000';
+            ctx.font = '16px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('L', item.x + item.width / 2, item.y + item.height / 2 + 5);
+        }
+        
+        ctx.restore();
     });
 }
 
 // 弾丸描画
 function drawBullets() {
-    ctx.fillStyle = '#FFD700';
     bullets.forEach(bullet => {
-        ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
-        
-        // 星型の弾丸エフェクト
-        ctx.fillStyle = '#FFF';
-        ctx.beginPath();
-        ctx.arc(bullet.x + bullet.width / 2, bullet.y + bullet.height / 2, 2, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#FFD700';
+        if (bullet.type === 'laser') {
+            // レーザー弾の描画
+            ctx.fillStyle = '#FFD700';
+            ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+            
+            // レーザーエフェクト
+            ctx.fillStyle = '#FFF';
+            ctx.fillRect(bullet.x + 2, bullet.y, bullet.width - 4, bullet.height);
+        } else {
+            // 通常弾の描画
+            ctx.fillStyle = bullet.type === 'triple' ? '#4169E1' : '#FFD700';
+            ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+            
+            // 星型の弾丸エフェクト
+            ctx.fillStyle = '#FFF';
+            ctx.beginPath();
+            ctx.arc(bullet.x + bullet.width / 2, bullet.y + bullet.height / 2, 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
     });
 }
 
@@ -292,7 +435,11 @@ function checkCollisions() {
                 bullets[i].y + bullets[i].height > boss.y) {
                 
                 bullets.splice(i, 1);
-                boss.takeDamage();
+                // レーザーは2倍ダメージ
+                const damage = bullets[i] && bullets[i].damage ? bullets[i].damage : 1;
+                for (let d = 0; d < damage; d++) {
+                    boss.takeDamage();
+                }
                 break;
             }
         }
@@ -300,10 +447,15 @@ function checkCollisions() {
     
     // プレイヤーと敵の衝突
     for (let i = enemies.length - 1; i >= 0; i--) {
-        if (enemies[i].x < player.x + player.width &&
-            enemies[i].x + enemies[i].width > player.x &&
-            enemies[i].y < player.y + player.height &&
-            enemies[i].y + enemies[i].height > player.y) {
+        // プレイヤーの当たり判定を中心部のみに縮小
+        const playerCenterX = player.x + player.width / 2;
+        const playerCenterY = player.y + player.height / 2;
+        const hitboxSize = 20; // 当たり判定のサイズ（元のサイズの約1/3）
+        
+        if (enemies[i].x < playerCenterX + hitboxSize / 2 &&
+            enemies[i].x + enemies[i].width > playerCenterX - hitboxSize / 2 &&
+            enemies[i].y < playerCenterY + hitboxSize / 2 &&
+            enemies[i].y + enemies[i].height > playerCenterY - hitboxSize / 2) {
             
             enemies.splice(i, 1);
             player.health--;
@@ -314,11 +466,65 @@ function checkCollisions() {
             }
         }
     }
+    
+    // プレイヤーとアイテムの衝突
+    for (let i = items.length - 1; i >= 0; i--) {
+        if (items[i].x < player.x + player.width &&
+            items[i].x + items[i].width > player.x &&
+            items[i].y < player.y + player.height &&
+            items[i].y + items[i].height > player.y) {
+            
+            // アイテム効果を適用
+            applyItemEffect(items[i].type);
+            items.splice(i, 1);
+        }
+    }
+}
+
+// アイテム効果の適用
+function applyItemEffect(itemType) {
+    switch(itemType) {
+        case ItemTypes.HEALTH:
+            // ライフ回復
+            player.health = Math.min(player.health + 1, player.maxHealth);
+            break;
+            
+        case ItemTypes.TRIPLE_SHOT:
+            // 3方向攻撃（10秒間）
+            player.weaponType = 'triple';
+            player.weaponTimer = 600; // 60fps × 10秒
+            break;
+            
+        case ItemTypes.LASER:
+            // レーザー攻撃（8秒間）
+            player.weaponType = 'laser';
+            player.weaponTimer = 480; // 60fps × 8秒
+            break;
+    }
 }
 
 // ゲーム更新
 function update() {
     if (!gameRunning) return;
+    
+    // 攻撃ボタンが押されている間の連射
+    if (keys['Space']) {
+        shootTimer++;
+        if (shootTimer > 10) { // 10フレームごとに発射
+            shootBullet();
+            shootTimer = 0;
+        }
+    } else {
+        shootTimer = 0;
+    }
+    
+    // 武器効果の時間制限
+    if (player.weaponTimer > 0) {
+        player.weaponTimer--;
+        if (player.weaponTimer <= 0) {
+            player.weaponType = 'normal'; // 通常武器に戻す
+        }
+    }
     
     // プレイヤー移動
     if (keys['ArrowLeft'] && player.x > 0) player.x -= player.speed;
@@ -328,22 +534,49 @@ function update() {
     
     // 弾丸更新
     for (let i = bullets.length - 1; i >= 0; i--) {
-        bullets[i].y -= bullets[i].speed;
+        if (bullets[i].type === 'triple' && bullets[i].speedX !== undefined) {
+            // 3方向弾の動き
+            bullets[i].x += bullets[i].speedX;
+            bullets[i].y -= bullets[i].speedY;
+        } else {
+            // 通常弾とレーザーの動き
+            bullets[i].y -= bullets[i].speed;
+        }
+        
         if (bullets[i].y < -10) {
             bullets.splice(i, 1);
         }
     }
     
+    // アイテム更新
+    for (let i = items.length - 1; i >= 0; i--) {
+        items[i].y += items[i].speed;
+        if (items[i].y > canvas.height + 40) {
+            items.splice(i, 1);
+        }
+    }
+    
     // 敵更新
     for (let i = enemies.length - 1; i >= 0; i--) {
-        enemies[i].y += enemies[i].speed;
-        if (enemies[i].y > canvas.height + 40) {
+        if (enemies[i].type === 'bossBullet' && enemies[i].speedX !== undefined) {
+            // ボスの弾の特殊な動き
+            enemies[i].x += enemies[i].speedX;
+            enemies[i].y += enemies[i].speedY;
+        } else {
+            // 通常の敵やボスの弾の動き
+            enemies[i].y += enemies[i].speed;
+        }
+        
+        // 画面外に出た敵を削除
+        if (enemies[i].y > canvas.height + 40 || 
+            enemies[i].x < -40 || 
+            enemies[i].x > canvas.width + 40) {
             enemies.splice(i, 1);
         }
     }
     
     // ボス出現条件
-    if (score >= 1000 && !boss && !bossDefeated) {
+    if (score >= 0 && !boss && !bossDefeated) {
         boss = new Boss();
     }
     
@@ -356,6 +589,9 @@ function update() {
     if (Math.random() < 0.02 && !boss) {
         spawnEnemy();
     }
+    
+    // アイテム生成
+    spawnItem();
     
     checkCollisions();
     
@@ -392,6 +628,7 @@ function draw() {
     
     drawPlayer();
     drawEnemies();
+    drawItems();
     drawBullets();
     
     if (boss && !bossDefeated) {
@@ -401,7 +638,23 @@ function draw() {
     // ヘルス表示
     ctx.fillStyle = '#FF69B4';
     ctx.font = '20px Comic Sans MS';
-    ctx.fillText(`❤️ × ${player.health}`, 20, 40);
+    ctx.fillText(`❤️ × ${player.health}/${player.maxHealth}`, 20, 40);
+    
+    // 武器状態表示
+    if (player.weaponType !== 'normal') {
+        ctx.fillStyle = '#FFD700';
+        ctx.font = '16px Comic Sans MS';
+        const timeLeft = Math.ceil(player.weaponTimer / 60);
+        let weaponText = '';
+        
+        if (player.weaponType === 'triple') {
+            weaponText = `🔱 3WAY: ${timeLeft}s`;
+        } else if (player.weaponType === 'laser') {
+            weaponText = `⚡ LASER: ${timeLeft}s`;
+        }
+        
+        ctx.fillText(weaponText, 20, 65);
+    }
     
     // ボス出現予告
     if (score >= 800 && score < 1000 && !boss) {
@@ -441,8 +694,11 @@ function restartGame() {
     player.x = canvas.width / 2;
     player.y = canvas.height - 80;
     player.health = 3;
+    player.weaponType = 'normal';
+    player.weaponTimer = 0;
     enemies = [];
     bullets = [];
+    items = [];
     boss = null;
     bossDefeated = false;
     gameOverTimer = 0;
@@ -471,5 +727,4 @@ function gameLoop() {
 }
 
 // ゲーム開始
-updateScore();
-gameLoop(); 
+updateScore(); 
