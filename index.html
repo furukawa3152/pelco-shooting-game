@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🐼 パンダシューター</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #87CEEB, #FFB6C1);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Comic Sans MS', cursive;
+            overflow: hidden;
+        }
+        
+        #gameContainer {
+            text-align: center;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+        
+        #gameCanvas {
+            border: 3px solid #333;
+            border-radius: 10px;
+            background: #87CEEB;
+        }
+        
+        h1 {
+            color: #333;
+            margin: 0 0 10px 0;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        
+        #score {
+            color: #333;
+            font-size: 18px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        
+        #instructions {
+            color: #666;
+            font-size: 14px;
+            margin: 10px 0;
+        }
+        
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            display: none;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+        
+        button {
+            background: #FF69B4;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px;
+            transition: all 0.3s;
+        }
+        
+        button:hover {
+            background: #FF1493;
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <h1>🐼 パンダシューター 🎯</h1>
+        <div id="score">スコア: 0</div>
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="instructions">
+            ↑↓←→ で移動、スペースキーで攻撃！<br>
+            可愛いパンダでボスパンダを倒そう！
+        </div>
+        
+        <div id="gameOver">
+            <h2 id="gameOverTitle">ゲーム終了</h2>
+            <p id="finalScore">最終スコア: 0</p>
+            <button onclick="restartGame()">もう一度遊ぶ</button>
+        </div>
+    </div>
+    
+    <script src="game.js"></script>
+</body>
+</html> 
