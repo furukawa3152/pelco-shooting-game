@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🐼 パンダシューター</title>
+    <title>🐼 ペルコちゃんシューティングゲーム</title>
     <style>
         body {
             margin: 0;
@@ -15,6 +15,9 @@
             min-height: 100vh;
             font-family: 'Comic Sans MS', cursive;
             overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
         }
         
         #gameContainer {
@@ -23,12 +26,14 @@
             border-radius: 20px;
             padding: 20px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            position: relative;
         }
         
         #gameCanvas {
             border: 3px solid #333;
             border-radius: 10px;
             background: #87CEEB;
+            position: relative;
         }
         
         h1 {
@@ -61,6 +66,7 @@
             text-align: center;
             display: none;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            z-index: 100;
         }
         
         button {
@@ -79,16 +85,166 @@
             background: #FF1493;
             transform: scale(1.05);
         }
+        
+        #controls {
+            display: flex;
+            justify-content: center;
+            margin-top: 10px;
+        }
+        
+        #soundToggle {
+            background: #4169E1;
+            padding: 8px 16px;
+            font-size: 14px;
+        }
+        
+        #soundToggle:hover {
+            background: #1E90FF;
+        }
+        
+        .panda-icon {
+            display: inline-block;
+            animation: bounce 2s infinite;
+        }
+        
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+        
+        .game-info {
+            margin-top: 15px;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.7);
+            border-radius: 10px;
+        }
+        
+        .game-info h3 {
+            margin-top: 0;
+            color: #FF69B4;
+        }
+        
+        .game-info ul {
+            text-align: left;
+            padding-left: 20px;
+        }
+        
+        /* スマホ用コントロールボタン */
+        .mobile-controls {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 10;
+        }
+        
+        .control-button {
+            width: 80px;
+            height: 80px;
+            background: rgba(255, 255, 255, 0.8);
+            border: 3px solid #333;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 30px;
+            color: #333;
+            cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            transition: all 0.2s;
+        }
+        
+        .control-button:active {
+            background: rgba(255, 105, 180, 0.8);
+            transform: scale(0.95);
+        }
+        
+        .control-button:hover {
+            background: rgba(255, 105, 180, 0.6);
+        }
+        
+        #leftButton {
+            left: -50px;
+        }
+        
+        #rightButton {
+            right: -50px;
+        }
+        
+        /* レスポンシブ対応 */
+        @media (max-width: 768px) {
+            #gameContainer {
+                padding: 10px;
+                margin: 10px;
+            }
+            
+            #gameCanvas {
+                max-width: 100%;
+                height: auto;
+            }
+            
+            h1 {
+                font-size: 24px;
+            }
+            
+            .control-button {
+                width: 60px;
+                height: 60px;
+                font-size: 24px;
+            }
+            
+            #leftButton {
+                left: -40px;
+            }
+            
+            #rightButton {
+                right: -40px;
+            }
+        }
     </style>
 </head>
 <body>
     <div id="gameContainer">
-        <h1>🐼 パンダシューター 🎯</h1>
+        <h1><span class="panda-icon">🐼</span> ペルコちゃんシューティングゲーム <span class="panda-icon">🎯</span></h1>
         <div id="score">スコア: 0</div>
-        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        
+        <div style="position: relative;">
+            <canvas id="gameCanvas" width="800" height="600"></canvas>
+            
+            <!-- スマホ用コントロールボタン -->
+            <div class="mobile-controls" id="leftButton">
+                <div class="control-button">←</div>
+            </div>
+            <div class="mobile-controls" id="rightButton">
+                <div class="control-button">→</div>
+            </div>
+            
+            <!-- スマホ用ゲーム開始ボタン -->
+            <div id="mobileStartButton" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 20; display: block; pointer-events: auto;">
+                <button id="startBtn" style="padding: 20px 40px; font-size: 24px; background: #FF69B4; color: white; border: none; border-radius: 15px; cursor: pointer; box-shadow: 0 4px 8px rgba(0,0,0,0.3); pointer-events: auto;">
+                    タップしてスタート！
+                </button>
+            </div>
+        </div>
+        
         <div id="instructions">
-            ↑↓←→ で移動、スペースキーで攻撃！<br>
-            可愛いパンダでボスパンダを倒そう！
+            左右ボタンで移動、弾は自動発射！<br>
+            可愛いペルコちゃんでパイルを倒そう！
+        </div>
+        
+        <div id="controls">
+            <button id="soundToggle" onclick="toggleSound()">🔊 サウンド ON/OFF</button>
+        </div>
+        
+        <div class="game-info">
+            <h3>アイテム一覧</h3>
+            <ul>
+                <li>❤️ ハート - ライフ回復</li>
+                <li>🔱 3WAY - 3方向に弾を発射</li>
+                <li>⚡ レーザー - 強力な貫通攻撃</li>
+                <li>🛡️ シールド - 一定時間無敵（攻撃も可能）</li>
+            </ul>
         </div>
         
         <div id="gameOver">
@@ -98,6 +254,154 @@
         </div>
     </div>
 
+    <script>
+        // サウンド管理
+        let soundEnabled = true;
+        
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            
+            const soundButton = document.getElementById('soundToggle');
+            soundButton.textContent = soundEnabled ? '🔊 サウンド ON/OFF' : '🔇 サウンド ON/OFF';
+            
+            // ゲームのサウンド設定を更新
+            if (window.updateSoundSettings) {
+                window.updateSoundSettings(soundEnabled);
+            }
+        }
+        
+        // スマホ用コントロール
+        let leftPressed = false;
+        let rightPressed = false;
+        
+        // タッチイベント
+        document.getElementById('leftButton').addEventListener('touchstart', function(e) {
+            e.preventDefault();
+            leftPressed = true;
+            if (window.setMobileControl) {
+                window.setMobileControl('left', true);
+            }
+        });
+        
+        document.getElementById('leftButton').addEventListener('touchend', function(e) {
+            e.preventDefault();
+            leftPressed = false;
+            if (window.setMobileControl) {
+                window.setMobileControl('left', false);
+            }
+        });
+        
+        document.getElementById('rightButton').addEventListener('touchstart', function(e) {
+            e.preventDefault();
+            rightPressed = true;
+            if (window.setMobileControl) {
+                window.setMobileControl('right', true);
+            }
+        });
+        
+        document.getElementById('rightButton').addEventListener('touchend', function(e) {
+            e.preventDefault();
+            rightPressed = false;
+            if (window.setMobileControl) {
+                window.setMobileControl('right', false);
+            }
+        });
+        
+        // マウスイベント（PC用）
+        document.getElementById('leftButton').addEventListener('mousedown', function(e) {
+            e.preventDefault();
+            leftPressed = true;
+            if (window.setMobileControl) {
+                window.setMobileControl('left', true);
+            }
+        });
+        
+        document.getElementById('leftButton').addEventListener('mouseup', function(e) {
+            e.preventDefault();
+            leftPressed = false;
+            if (window.setMobileControl) {
+                window.setMobileControl('left', false);
+            }
+        });
+        
+        document.getElementById('rightButton').addEventListener('mousedown', function(e) {
+            e.preventDefault();
+            rightPressed = true;
+            if (window.setMobileControl) {
+                window.setMobileControl('right', true);
+            }
+        });
+        
+        document.getElementById('rightButton').addEventListener('mouseup', function(e) {
+            e.preventDefault();
+            rightPressed = false;
+            if (window.setMobileControl) {
+                window.setMobileControl('right', false);
+            }
+        });
+        
+        // タッチ操作でのスクロール防止
+        document.addEventListener('touchmove', function(e) {
+            e.preventDefault();
+        }, { passive: false });
+        
+        // スマホ用ゲーム開始ボタン
+        const startButton = document.getElementById('startBtn');
+        if (startButton) {
+            startButton.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('Start button clicked');
+                if (window.handleMobileStart) {
+                    window.handleMobileStart();
+                }
+            });
+            
+            startButton.addEventListener('touchstart', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('Start button touched');
+                if (window.handleMobileStart) {
+                    window.handleMobileStart();
+                }
+            });
+        }
+        
+        document.getElementById('mobileStartButton').addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('Mobile start button div clicked');
+            if (window.handleMobileStart) {
+                window.handleMobileStart();
+            }
+        });
+        
+        document.getElementById('mobileStartButton').addEventListener('touchstart', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('Mobile start button div touched');
+            if (window.handleMobileStart) {
+                window.handleMobileStart();
+            }
+        });
+        
+        // キャンバスタッチでもゲーム開始
+        document.getElementById('gameCanvas').addEventListener('touchstart', function(e) {
+            e.preventDefault();
+            console.log('Canvas touched');
+            if (window.handleCanvasTouch) {
+                window.handleCanvasTouch();
+            }
+        });
+        
+        document.getElementById('gameCanvas').addEventListener('click', function(e) {
+            e.preventDefault();
+            console.log('Canvas clicked');
+            if (window.handleCanvasTouch) {
+                window.handleCanvasTouch();
+            }
+        });
+    </script>
     <script src="game.js"></script>
 </body>
-</html> 
+</html>
