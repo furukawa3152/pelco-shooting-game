@@ -303,11 +303,15 @@ class Boss {
         this.width = 120 * sizeMultiplier;
         this.height = 120 * sizeMultiplier;
         
-        // 周回に応じて体力を調整
-        if (round === 3) {
-            this.maxHealth = 60; // 3周目は2体なので個別体力は少なめ
-        } else {
-            this.maxHealth = 50 + (round - 1) * 35; // 1周目50、2周目85、4周目155
+        // 周回に応じて体力を調整（超大幅強化）
+        if (round === 1) {
+            this.maxHealth = 1000; // 1周目: 100 → 1000 (10倍)
+        } else if (round === 2) {
+            this.maxHealth = 1800; // 2周目: 180 → 1800 (10倍)
+        } else if (round === 3) {
+            this.maxHealth = 720; // 3周目: 120 → 720 (6倍、2体なので個別体力)
+        } else if (round === 4) {
+            this.maxHealth = 5100; // 4周目: 340 → 5100 (15倍)
         }
         this.health = this.maxHealth;
         
@@ -336,7 +340,6 @@ class Boss {
             } catch (e) {
                 console.log('ボスBGMの再生に失敗しました');
             }
-        }
         }
     }
     
@@ -569,7 +572,7 @@ class Boss {
         });
         
         if (this.health <= 0) {
-            bossDefeated = true;
+            // bossDefeatedの設定はupdate関数内で行う（3周目の2体ボス対応）
             score += 1000 * this.round; // 周回に応じてスコア倍増
             updateScore();
             
@@ -596,10 +599,15 @@ class Boss {
     }
 }
 
-// 敵生成
+// 敵生成（複数敵同時生成対応）
 function spawnEnemy() {
-    if (!boss) {
-        const enemyType = Math.random() < 0.2 ? 'fast' : 'normal';
+    // 1回の呼び出しで1-3体の敵を生成（ボス戦中は少なめ）
+    const enemyCount = boss ? 
+        (Math.random() < 0.7 ? 1 : 2) : // ボス戦中は1-2体
+        (Math.random() < 0.4 ? 1 : Math.random() < 0.7 ? 2 : 3); // 通常時は1-3体
+    
+    for (let i = 0; i < enemyCount; i++) {
+        const enemyType = Math.random() < 0.3 ? 'fast' : 'normal'; // 高速敵の確率を上げる
         
         // 周回に応じて敵の速度を調整（より緩やかに）
         const speedMultiplier = 1 + (currentRound - 1) * 0.2; // 0.3から0.2に変更
@@ -611,7 +619,7 @@ function spawnEnemy() {
         
         enemies.push({
             x: Math.random() * (canvas.width - enemySize),
-            y: -enemySize,
+            y: -enemySize - (i * 50), // 複数敵の場合は少し間隔を空ける
             width: enemySize,
             height: enemySize,
             speed: enemySpeed,
@@ -1024,7 +1032,10 @@ function drawItems() {
                 ctx.lineTo(item.width / 4, -item.height / 4);
                 ctx.closePath();
                 ctx.fill();
-            }
+                
+                // レーザーマーク
+                ctx.fillStyle = '#FFF';
+                ctx.font = '14px Arial';
                 ctx.textAlign = 'center';
                 ctx.fillText('L', 0, 5);
                 
@@ -1251,9 +1262,6 @@ function checkCollisions() {
         
         // 弾丸が削除されていたらループを抜ける
         if (bulletRemoved) break;
-    }
-            }
-        }
     }
     
     // 弾丸とボスの衝突（2体ボス対応）
@@ -1528,6 +1536,16 @@ function applyItemEffect(itemType) {
 function update() {
     if (!gameRunning) return;
     
+    // 3周目の状態を定期的に監視
+    if (currentRound === 3 && Math.random() < 0.01) { // 1%の確率でログ出力
+        console.log(`3周目状態: score=${score}, boss=${!!boss}, secondBoss=${!!secondBoss}, bossDefeated=${bossDefeated}, gameOverTimer=${gameOverTimer}, roundClearTimer=${roundClearTimer}`);
+        
+        // bossDefeatedがtrueの場合、警告を出す
+        if (bossDefeated && (!boss || !secondBoss)) {
+            console.warn("警告: 3周目でボス未出現なのにbossDefeated=true!");
+        }
+    }
+    
     // 無敵時間の更新
     if (player.invincible) {
         player.invincibleTimer--;
@@ -1689,12 +1707,15 @@ function update() {
     
     // ボス出現条件（各周回で1000点に達したらボス出現）
     if (score >= 1000 && !boss && !bossDefeated) {
+        console.log(`ボス出現条件満了: ${currentRound}周目, score: ${score}`);
         if (currentRound === 3) {
             // 3周目は2体のボスを同時出現
             boss = new Boss(currentRound, false); // 1体目
             secondBoss = new Boss(currentRound, true); // 2体目
+            console.log("3周目：2体のボス生成完了");
         } else {
             boss = new Boss(currentRound);
+            console.log(`${currentRound}周目：ボス生成完了`);
         }
         bossMode = true;
         
@@ -1730,22 +1751,30 @@ function update() {
         
         // 3周目の場合、両方のボスが倒されたかチェック
         if (currentRound === 3) {
-            if ((!boss || boss.health <= 0) && (!secondBoss || secondBoss.health <= 0)) {
-                bossDefeated = true;
-                boss = null;
-                secondBoss = null;
+            // ボスが両方出現している場合のみ撃破判定を行う
+            if (boss && secondBoss) {
+                let firstBossDefeated = boss.health <= 0;
+                let secondBossDefeated = secondBoss.health <= 0;
+                
+                if (firstBossDefeated && secondBossDefeated) {
+                    bossDefeated = true;
+                    boss = null;
+                    secondBoss = null;
+                    console.log("3周目：両方のボス撃破完了！");
+                }
             }
         } else {
             // 通常の周回では1体のボスのみ
             if (boss && boss.health <= 0) {
                 bossDefeated = true;
                 boss = null;
+                console.log(`${currentRound}周目：ボス撃破完了！`);
             }
         }
     }
     
-    // 敵生成（確率を下げる）
-    if (Math.random() < 0.015 && !boss) { // 元は0.02
+    // 敵生成（確率を大幅に上げる、ボス戦中も通常敵が出現）
+    if (Math.random() < 0.04) { // 0.015から0.04に大幅増加、ボス戦中も敵出現
         spawnEnemy();
     }
     
@@ -1755,17 +1784,21 @@ function update() {
     checkCollisions();
     
     // ボス撃破後の処理
-    if (bossDefeated && gameOverTimer++ > 180) {
-        if (currentRound < maxRounds) {
-            // 次の周回へ
-            roundClearTimer++;
-            if (roundClearTimer > 240) { // 4秒後に次の周回開始
-                startNextRound();
+    if (bossDefeated) {
+        gameOverTimer++;
+        if (gameOverTimer > 180) {
+            if (currentRound < maxRounds) {
+                // 次の周回へ
+                roundClearTimer++;
+                console.log(`周回クリア待機中: ${currentRound}周目, roundClearTimer: ${roundClearTimer}`);
+                if (roundClearTimer > 240) { // 4秒後に次の周回開始
+                    startNextRound();
+                }
+            } else {
+                // 全周回クリア
+                gameRunning = false;
+                showGameOver(true, true); // 完全クリア
             }
-        } else {
-            // 全周回クリア
-            gameRunning = false;
-            showGameOver(true, true); // 完全クリア
         }
     }
 }
@@ -2098,13 +2131,24 @@ function showGameOver(victory = false, completeClear = false) {
 
 // 次の周回開始
 function startNextRound() {
+    console.log(`次の周回開始: ${currentRound} → ${currentRound + 1}`);
     currentRound++;
+    
+    // 周回状態を完全にリセット
     bossDefeated = false;
     boss = null;
     secondBoss = null;
     bossMode = false;
     gameOverTimer = 0;
     roundClearTimer = 0;
+    
+    // 念のため、bossDefeatedを再度falseに設定
+    setTimeout(() => {
+        bossDefeated = false;
+        console.log(`周回状態追加リセット: ${currentRound}周目, bossDefeated=${bossDefeated}`);
+    }, 100);
+    
+    console.log(`周回状態リセット完了: 現在${currentRound}周目, bossDefeated=${bossDefeated}`);
     
     // プレイヤーの体力を回復
     player.health = Math.min(player.health + 1, player.maxHealth);
@@ -2116,8 +2160,12 @@ function startNextRound() {
     // スコアを各周回の開始値にリセット
     if (currentRound === 2) {
         score = 0; // 2周目は0から開始
+        console.log("2周目開始：スコアを0にリセット");
     } else if (currentRound === 3) {
         score = 0; // 3周目も0から開始
+        console.log("3周目開始：スコアを0にリセット");
+    } else if (currentRound === 4) {
+        console.log("4周目開始：スコアリセットなし");
     }
     updateScore();
     

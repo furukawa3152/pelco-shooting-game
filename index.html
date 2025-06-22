@@ -234,7 +234,7 @@
         </div>
         
         <div id="controls">
-            <button id="soundToggle" onclick="toggleSound()">🔊 サウンド ON/OFF</button>
+            <button id="soundToggle">🔊 サウンド ON/OFF</button>
         </div>
         
         <div class="game-info">
@@ -250,7 +250,7 @@
         <div id="gameOver">
             <h2 id="gameOverTitle">ゲーム終了</h2>
             <p id="finalScore">最終スコア: 0</p>
-            <button onclick="restartGame()">もう一度遊ぶ</button>
+            <button id="restartButton">もう一度遊ぶ</button>
         </div>
     </div>
 
@@ -270,137 +270,140 @@
             }
         }
         
+        // ボタンのイベントリスナーを追加
+        document.addEventListener('DOMContentLoaded', function() {
+            const soundButton = document.getElementById('soundToggle');
+            if (soundButton) {
+                soundButton.addEventListener('click', toggleSound);
+            }
+            
+            const restartButton = document.getElementById('restartButton');
+            if (restartButton) {
+                restartButton.addEventListener('click', function() {
+                    if (window.restartGame) {
+                        window.restartGame();
+                    }
+                });
+            }
+            
+            // コントロールボタンを初期化
+            initializeControlButtons();
+            
+            // ゲーム開始イベントを初期化
+            initializeGameStartEvents();
+        });
+        
+        // エラーハンドリングを追加
+        window.addEventListener('error', function(e) {
+            console.error('JavaScript Error:', e.error);
+        });
+        
         // スマホ用コントロール
         let leftPressed = false;
         let rightPressed = false;
         
-        // タッチイベント
-        document.getElementById('leftButton').addEventListener('touchstart', function(e) {
-            e.preventDefault();
-            leftPressed = true;
-            if (window.setMobileControl) {
-                window.setMobileControl('left', true);
-            }
-        });
-        
-        document.getElementById('leftButton').addEventListener('touchend', function(e) {
-            e.preventDefault();
-            leftPressed = false;
-            if (window.setMobileControl) {
-                window.setMobileControl('left', false);
-            }
-        });
-        
-        document.getElementById('rightButton').addEventListener('touchstart', function(e) {
-            e.preventDefault();
-            rightPressed = true;
-            if (window.setMobileControl) {
-                window.setMobileControl('right', true);
-            }
-        });
-        
-        document.getElementById('rightButton').addEventListener('touchend', function(e) {
-            e.preventDefault();
-            rightPressed = false;
-            if (window.setMobileControl) {
-                window.setMobileControl('right', false);
-            }
-        });
-        
-        // マウスイベント（PC用）
-        document.getElementById('leftButton').addEventListener('mousedown', function(e) {
-            e.preventDefault();
-            leftPressed = true;
-            if (window.setMobileControl) {
-                window.setMobileControl('left', true);
-            }
-        });
-        
-        document.getElementById('leftButton').addEventListener('mouseup', function(e) {
-            e.preventDefault();
-            leftPressed = false;
-            if (window.setMobileControl) {
-                window.setMobileControl('left', false);
-            }
-        });
-        
-        document.getElementById('rightButton').addEventListener('mousedown', function(e) {
-            e.preventDefault();
-            rightPressed = true;
-            if (window.setMobileControl) {
-                window.setMobileControl('right', true);
-            }
-        });
-        
-        document.getElementById('rightButton').addEventListener('mouseup', function(e) {
-            e.preventDefault();
-            rightPressed = false;
-            if (window.setMobileControl) {
-                window.setMobileControl('right', false);
-            }
-        });
+        // コントロールボタンの初期化
+        function initializeControlButtons() {
+            const leftButton = document.getElementById('leftButton');
+            const rightButton = document.getElementById('rightButton');
+            
+            if (!leftButton || !rightButton) return;
+            
+            // 左ボタンイベント
+            const leftEvents = {
+                start: (e) => {
+                    e.preventDefault();
+                    leftPressed = true;
+                    if (window.setMobileControl) {
+                        window.setMobileControl('left', true);
+                    }
+                },
+                end: (e) => {
+                    e.preventDefault();
+                    leftPressed = false;
+                    if (window.setMobileControl) {
+                        window.setMobileControl('left', false);
+                    }
+                }
+            };
+            
+            // 右ボタンイベント
+            const rightEvents = {
+                start: (e) => {
+                    e.preventDefault();
+                    rightPressed = true;
+                    if (window.setMobileControl) {
+                        window.setMobileControl('right', true);
+                    }
+                },
+                end: (e) => {
+                    e.preventDefault();
+                    rightPressed = false;
+                    if (window.setMobileControl) {
+                        window.setMobileControl('right', false);
+                    }
+                }
+            };
+            
+            // タッチイベント
+            leftButton.addEventListener('touchstart', leftEvents.start);
+            leftButton.addEventListener('touchend', leftEvents.end);
+            rightButton.addEventListener('touchstart', rightEvents.start);
+            rightButton.addEventListener('touchend', rightEvents.end);
+            
+            // マウスイベント（PC用）
+            leftButton.addEventListener('mousedown', leftEvents.start);
+            leftButton.addEventListener('mouseup', leftEvents.end);
+            rightButton.addEventListener('mousedown', rightEvents.start);
+            rightButton.addEventListener('mouseup', rightEvents.end);
+        }
         
         // タッチ操作でのスクロール防止
         document.addEventListener('touchmove', function(e) {
             e.preventDefault();
         }, { passive: false });
         
-        // スマホ用ゲーム開始ボタン
-        const startButton = document.getElementById('startBtn');
-        if (startButton) {
-            startButton.addEventListener('click', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('Start button clicked');
-                if (window.handleMobileStart) {
-                    window.handleMobileStart();
-                }
-            });
+        // ゲーム開始イベントの初期化
+        function initializeGameStartEvents() {
+            const startButton = document.getElementById('startBtn');
+            const mobileStartButton = document.getElementById('mobileStartButton');
+            const gameCanvas = document.getElementById('gameCanvas');
             
-            startButton.addEventListener('touchstart', function(e) {
+            const handleStart = (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                console.log('Start button touched');
+                console.log('Game start triggered');
                 if (window.handleMobileStart) {
                     window.handleMobileStart();
                 }
-            });
+            };
+            
+            const handleCanvasInteraction = (e) => {
+                e.preventDefault();
+                console.log('Canvas interaction');
+                if (window.handleCanvasTouch) {
+                    window.handleCanvasTouch();
+                }
+            };
+            
+            // スタートボタンイベント
+            if (startButton) {
+                startButton.addEventListener('click', handleStart);
+                startButton.addEventListener('touchstart', handleStart);
+            }
+            
+            // モバイルスタートボタンイベント
+            if (mobileStartButton) {
+                mobileStartButton.addEventListener('click', handleStart);
+                mobileStartButton.addEventListener('touchstart', handleStart);
+            }
+            
+            // キャンバスイベント
+            if (gameCanvas) {
+                gameCanvas.addEventListener('click', handleCanvasInteraction);
+                gameCanvas.addEventListener('touchstart', handleCanvasInteraction);
+            }
         }
-        
-        document.getElementById('mobileStartButton').addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            console.log('Mobile start button div clicked');
-            if (window.handleMobileStart) {
-                window.handleMobileStart();
-            }
-        });
-        
-        document.getElementById('mobileStartButton').addEventListener('touchstart', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            console.log('Mobile start button div touched');
-            if (window.handleMobileStart) {
-                window.handleMobileStart();
-            }
-        });
-        
-        // キャンバスタッチでもゲーム開始
-        document.getElementById('gameCanvas').addEventListener('touchstart', function(e) {
-            e.preventDefault();
-            console.log('Canvas touched');
-            if (window.handleCanvasTouch) {
-                window.handleCanvasTouch();
-            }
-        });
-        
-        document.getElementById('gameCanvas').addEventListener('click', function(e) {
-            e.preventDefault();
-            console.log('Canvas clicked');
-            if (window.handleCanvasTouch) {
-                window.handleCanvasTouch();
-            }
-        });
     </script>
     <script src="game.js"></script>
 </body>
