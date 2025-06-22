@@ -23,17 +23,29 @@ bossImage.src = 'pile.png';
 const enemyImage = new Image();
 enemyImage.src = 'enemy.png';
 
-// アイテム画像
+// アイテム画像（拡張）
 const itemImages = {
     health: new Image(),
     triple: new Image(),
     laser: new Image(),
-    shield: new Image()
+    shield: new Image(),
+    rapid_fire: new Image(),
+    speed_up: new Image(),
+    power_up: new Image(),
+    homing: new Image(),
+    spread: new Image(),
+    penetrate: new Image()
 };
 itemImages.health.src = 'item1.png';
 itemImages.triple.src = 'item2.png';
 itemImages.laser.src = 'item3.png';
 itemImages.shield.src = 'item1.png'; // シールドはitem1を再利用
+itemImages.rapid_fire.src = 'item2.png'; // 連射はitem2を再利用
+itemImages.speed_up.src = 'item3.png'; // スピードはitem3を再利用
+itemImages.power_up.src = 'item1.png'; // パワーはitem1を再利用
+itemImages.homing.src = 'item2.png'; // ホーミングはitem2を再利用
+itemImages.spread.src = 'item3.png'; // 拡散はitem3を再利用
+itemImages.penetrate.src = 'item1.png'; // 貫通はitem1を再利用
 
 // サウンド設定
 const sounds = {
@@ -60,7 +72,7 @@ sounds.bgm.volume = 0.5;
 
 // 画像が読み込まれるまで待機
 let imagesLoaded = 0;
-const totalImages = 9; // 画像数を更新（選択用2枚、プレイ用2枚、ボス、敵、アイテム3枚）
+const totalImages = 9; // 画像数（選択用2枚、プレイ用2枚、ボス、敵、アイテム3枚）
 
 function checkAllImagesLoaded() {
     imagesLoaded++;
@@ -123,6 +135,7 @@ let enemies = [];
 let bullets = [];
 let items = []; // アイテム配列を追加
 let boss = null;
+let secondBoss = null; // 3周目用の2体目ボス
 let bossDefeated = false;
 let gameOverTimer = 0;
 let shootTimer = 0; // 連射用タイマーを追加
@@ -132,7 +145,7 @@ let bossMode = false; // ボスモードフラグ
 let characterSelected = false; // キャラクター選択フラグ
 let selectedCharacter = 1; // 選択されたキャラクター（1または2）
 let currentRound = 1; // 現在の周回数
-let maxRounds = 3; // 最大周回数
+let maxRounds = 4; // 最大周回数（4周回に拡張）
 let roundClearTimer = 0; // 周回クリア時のタイマー
 
 // スマホ用コントロール
@@ -225,20 +238,32 @@ const player = {
     speed: 3, // 移動速度を下げる（元は4）
     health: 3,
     maxHealth: 5, // 最大ライフを追加
-    weaponType: 'normal', // 武器タイプ: 'normal', 'triple', 'laser', 'shield'
-    weaponTimer: 0, // 武器効果の残り時間
+    // 複数武器効果を同時に持てるように変更
+    activeWeapons: new Set(['normal']), // アクティブな武器効果のセット
+    weaponTimers: {}, // 各武器効果の残り時間
     invincible: false, // 無敵状態
     invincibleTimer: 0, // 無敵時間
     blinkTimer: 0, // 点滅エフェクト用タイマー
-    autoShootTimer: 0 // 自動発射用タイマー
+    autoShootTimer: 0, // 自動発射用タイマー
+    // 新しい能力値
+    fireRate: 1.0, // 発射速度倍率
+    moveSpeed: 1.0, // 移動速度倍率
+    bulletDamage: 1.0, // 弾丸ダメージ倍率
+    bulletSpeed: 1.0 // 弾丸速度倍率
 };
 
-// アイテムタイプ
+// アイテムタイプ（大幅拡張）
 const ItemTypes = {
     HEALTH: 'health',
     TRIPLE_SHOT: 'triple',
     LASER: 'laser',
-    SHIELD: 'shield' // 新しいシールドアイテムを追加
+    SHIELD: 'shield',
+    RAPID_FIRE: 'rapid_fire', // 連射速度アップ
+    SPEED_UP: 'speed_up', // 移動速度アップ
+    POWER_UP: 'power_up', // 攻撃力アップ
+    HOMING: 'homing', // ホーミング弾
+    SPREAD: 'spread', // 拡散弾
+    PENETRATE: 'penetrate' // 貫通弾
 };
 
 // エフェクトタイプ
@@ -250,9 +275,18 @@ const EffectTypes = {
 
 // ボス設定
 class Boss {
-    constructor(round = 1) {
+    constructor(round = 1, isSecondBoss = false) {
         this.round = round;
-        this.x = canvas.width / 2 - 78; // ボスの位置を調整（大きくなるため）
+        this.isSecondBoss = isSecondBoss; // 3周目の2体目かどうか
+        
+        // 3周目の2体ボス戦の場合の位置調整
+        if (round === 3 && isSecondBoss) {
+            this.x = canvas.width * 3/4 - 60; // 右側に配置
+        } else if (round === 3 && !isSecondBoss) {
+            this.x = canvas.width * 1/4 - 60; // 左側に配置
+        } else {
+            this.x = canvas.width / 2 - 78; // 中央配置
+        }
         this.y = 100;
         
         // 周回に応じてサイズを調整
@@ -260,19 +294,25 @@ class Boss {
         if (round === 2) {
             sizeMultiplier = 1.5; // 2周目は1.5倍
         } else if (round === 3) {
-            sizeMultiplier = 2.0; // 3周目は2倍
-            this.x = canvas.width / 2 - 120; // より大きいので位置調整
+            sizeMultiplier = 1.4; // 3周目は2体なので少し小さめ
+        } else if (round === 4) {
+            sizeMultiplier = 2.2; // 4周目（激おこパイル）は最大サイズ
+            this.x = canvas.width / 2 - 132; // より大きいので位置調整
         }
         
         this.width = 120 * sizeMultiplier;
         this.height = 120 * sizeMultiplier;
         
         // 周回に応じて体力を調整
-        this.maxHealth = 50 + (round - 1) * 30; // 1周目50、2周目80、3周目110
+        if (round === 3) {
+            this.maxHealth = 60; // 3周目は2体なので個別体力は少なめ
+        } else {
+            this.maxHealth = 50 + (round - 1) * 35; // 1周目50、2周目85、4周目155
+        }
         this.health = this.maxHealth;
         
-        // 周回に応じて速度を調整（より緩やかに）
-        this.speed = 1.2 + (round - 1) * 0.3; // 1周目1.2、2周目1.5、3周目1.8
+        // 周回に応じて速度を調整
+        this.speed = 1.2 + (round - 1) * 0.3; // 1周目1.2、2周目1.5、3周目1.8、4周目2.1
         this.direction = 1;
         this.attackTimer = 0;
         this.hammerSwing = 0;
@@ -284,16 +324,19 @@ class Boss {
         this.angry = false; // ボスの怒りモード
         this.entryAnimation = 0; // 登場アニメーション
         
-        // 周回に応じて攻撃間隔を調整（より緩やかに）
-        this.attackInterval = Math.max(30, 50 - (round - 1) * 10); // 1周目50、2周目40、3周目30
+        // 周回に応じて攻撃間隔を調整
+        this.attackInterval = Math.max(25, 50 - (round - 1) * 8); // より攻撃的に
         
-        // ボスBGM開始
-        try {
-            sounds.bgm.pause();
-            sounds.bossBattle.currentTime = 0;
-            sounds.bossBattle.play();
-        } catch (e) {
-            console.log('ボスBGMの再生に失敗しました');
+        // ボスBGM開始（最初のボスのみ）
+        if (!isSecondBoss) {
+            try {
+                sounds.bgm.pause();
+                sounds.bossBattle.currentTime = 0;
+                sounds.bossBattle.play();
+            } catch (e) {
+                console.log('ボスBGMの再生に失敗しました');
+            }
+        }
         }
     }
     
@@ -582,9 +625,22 @@ function spawnEnemy() {
 // アイテム生成
 function spawnItem() {
     // ランダムでアイテム生成（確率は低めに）
-    if (Math.random() < 0.008) { // 0.8%の確率（元は0.005）
-        const itemTypes = Object.values(ItemTypes);
-        const randomType = itemTypes[Math.floor(Math.random() * itemTypes.length)];
+    if (Math.random() < 0.012) { // 1.2%の確率（新アイテム追加で少し上げる）
+        // アイテムタイプの重み付け
+        const itemPool = [
+            ItemTypes.HEALTH, ItemTypes.HEALTH, ItemTypes.HEALTH, // 回復は多めに
+            ItemTypes.TRIPLE_SHOT, ItemTypes.TRIPLE_SHOT,
+            ItemTypes.LASER, ItemTypes.LASER,
+            ItemTypes.SHIELD, ItemTypes.SHIELD,
+            ItemTypes.RAPID_FIRE,
+            ItemTypes.SPEED_UP,
+            ItemTypes.POWER_UP,
+            ItemTypes.HOMING,
+            ItemTypes.SPREAD,
+            ItemTypes.PENETRATE
+        ];
+        
+        const randomType = itemPool[Math.floor(Math.random() * itemPool.length)];
         
         items.push({
             x: Math.random() * (canvas.width - 40),
@@ -638,7 +694,7 @@ function createEffect(type, x, y, options = {}) {
     }
 }
 
-// 弾丸発射（武器タイプ対応）
+// 弾丸発射（複数武器効果対応）
 function shootBullet() {
     // 発射効果音
     try {
@@ -649,65 +705,90 @@ function shootBullet() {
         console.log('効果音の再生に失敗しました');
     }
     
-    if (player.weaponType === 'normal' || player.weaponType === 'shield') {
-        // 通常弾（シールド時も発射可能）
-        bullets.push({
+    const baseSpeed = 8 * player.bulletSpeed;
+    const baseDamage = 1 * player.bulletDamage;
+    
+    // 基本弾丸を発射
+    let bulletsFired = [];
+    
+    // 通常弾またはシールド時
+    if (player.activeWeapons.has('normal') || player.activeWeapons.has('shield')) {
+        bulletsFired.push({
             x: player.x + player.width / 2 - 3,
             y: player.y,
             width: 6,
             height: 12,
-            speed: 8,
-            type: 'normal'
+            speed: baseSpeed,
+            damage: baseDamage,
+            type: 'normal',
+            penetrate: player.activeWeapons.has('penetrate'),
+            homing: player.activeWeapons.has('homing')
         });
-        
-        // 発射エフェクト
-        createEffect(EffectTypes.SPARKLE, player.x + player.width / 2, player.y, {
-            size: 15,
-            color: '#FFFF00',
-            timer: 10
-        });
-        
-    } else if (player.weaponType === 'triple') {
-        // 3方向弾
+    }
+    
+    // 3方向弾
+    if (player.activeWeapons.has('triple')) {
         for (let i = -1; i <= 1; i++) {
-            bullets.push({
+            bulletsFired.push({
                 x: player.x + player.width / 2 - 3,
                 y: player.y,
                 width: 6,
                 height: 12,
-                speed: 8,
-                speedX: i * 2, // 横方向の速度
-                speedY: 8,
-                type: 'triple'
-            });
-            
-            // 発射エフェクト
-            createEffect(EffectTypes.SPARKLE, player.x + player.width / 2 + i * 10, player.y, {
-                size: 12,
-                color: '#4169E1',
-                timer: 10
+                speed: baseSpeed,
+                speedX: i * 2,
+                speedY: baseSpeed,
+                damage: baseDamage * 0.8, // 3方向弾は少し威力を下げる
+                type: 'triple',
+                penetrate: player.activeWeapons.has('penetrate'),
+                homing: player.activeWeapons.has('homing')
             });
         }
-        
-    } else if (player.weaponType === 'laser') {
-        // レーザー（太くて高威力）
-        bullets.push({
+    }
+    
+    // レーザー
+    if (player.activeWeapons.has('laser')) {
+        bulletsFired.push({
             x: player.x + player.width / 2 - 6,
             y: player.y,
             width: 12,
             height: 25,
-            speed: 12,
+            speed: baseSpeed * 1.2,
+            damage: baseDamage * 2,
             type: 'laser',
-            damage: 2 // 2倍ダメージ
-        });
-        
-        // レーザーエフェクト
-        createEffect(EffectTypes.SPARKLE, player.x + player.width / 2, player.y, {
-            size: 20,
-            color: '#FFD700',
-            timer: 15
+            penetrate: true, // レーザーは常に貫通
+            homing: false
         });
     }
+    
+    // 拡散弾
+    if (player.activeWeapons.has('spread')) {
+        for (let i = 0; i < 5; i++) {
+            const angle = (i - 2) * 0.3; // -0.6 to 0.6 radians
+            bulletsFired.push({
+                x: player.x + player.width / 2 - 2,
+                y: player.y,
+                width: 4,
+                height: 8,
+                speed: baseSpeed * 0.9,
+                speedX: Math.sin(angle) * baseSpeed * 0.9,
+                speedY: Math.cos(angle) * baseSpeed * 0.9,
+                damage: baseDamage * 0.6,
+                type: 'spread',
+                penetrate: player.activeWeapons.has('penetrate'),
+                homing: false
+            });
+        }
+    }
+    
+    // 弾丸を配列に追加
+    bullets.push(...bulletsFired);
+    
+    // 発射エフェクト
+    createEffect(EffectTypes.SPARKLE, player.x + player.width / 2, player.y, {
+        size: 15,
+        color: '#FFFF00',
+        timer: 10
+    });
 }
 
 // プレイヤー描画
@@ -742,7 +823,7 @@ function drawPlayer() {
     }
     
     // シールドエフェクト
-    if (player.weaponType === 'shield') {
+    if (player.activeWeapons.has('shield')) {
         ctx.strokeStyle = 'rgba(100, 200, 255, 0.7)';
         ctx.lineWidth = 3;
         ctx.beginPath();
@@ -865,28 +946,85 @@ function drawItems() {
                 ctx.closePath();
                 ctx.fill();
                 
-                // 3つの矢印マーク
-                ctx.strokeStyle = '#FFF';
-                ctx.lineWidth = 2;
-                for (let i = -1; i <= 1; i++) {
-                    ctx.beginPath();
-                    ctx.moveTo(i * 6, -5);
-                    ctx.lineTo(i * 6, 5);
-                    ctx.stroke();
-                }
-                
             } else if (item.type === ItemTypes.LASER) {
                 // レーザー（黄色い四角）
                 ctx.fillStyle = '#FFD700';
                 ctx.fillRect(-item.width / 2, -item.height / 2, item.width, item.height);
                 
-                // レーザーエフェクト
-                ctx.fillStyle = '#FFF';
-                ctx.fillRect(-item.width / 2 + 5, -item.height / 2 + 5, item.width - 10, item.height - 10);
+            } else if (item.type === ItemTypes.SHIELD) {
+                // シールド（青い盾）
+                ctx.fillStyle = '#1E90FF';
+                ctx.beginPath();
+                ctx.arc(0, 0, item.width / 2, 0, Math.PI * 2);
+                ctx.fill();
                 
-                // L字マーク
+            } else if (item.type === ItemTypes.RAPID_FIRE) {
+                // 連射（オレンジの矢印）
+                ctx.fillStyle = '#FF4500';
+                ctx.beginPath();
+                ctx.moveTo(0, -item.height / 2);
+                ctx.lineTo(-item.width / 3, 0);
+                ctx.lineTo(item.width / 3, 0);
+                ctx.closePath();
+                ctx.fill();
+                
+            } else if (item.type === ItemTypes.SPEED_UP) {
+                // スピードアップ（緑の稲妻）
+                ctx.fillStyle = '#00FF00';
+                ctx.beginPath();
+                ctx.moveTo(-item.width / 4, -item.height / 2);
+                ctx.lineTo(item.width / 4, -item.height / 4);
+                ctx.lineTo(-item.width / 8, 0);
+                ctx.lineTo(item.width / 4, item.height / 2);
+                ctx.lineTo(-item.width / 4, item.height / 4);
+                ctx.lineTo(item.width / 8, 0);
+                ctx.closePath();
+                ctx.fill();
+                
+            } else if (item.type === ItemTypes.POWER_UP) {
+                // パワーアップ（赤い星）
                 ctx.fillStyle = '#FF0000';
-                ctx.font = '16px Arial';
+                ctx.beginPath();
+                for (let i = 0; i < 5; i++) {
+                    const angle = (i * 4 * Math.PI) / 5;
+                    const x = Math.cos(angle) * item.width / 3;
+                    const y = Math.sin(angle) * item.height / 3;
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.closePath();
+                ctx.fill();
+                
+            } else if (item.type === ItemTypes.HOMING) {
+                // ホーミング（ピンクの円）
+                ctx.fillStyle = '#FF69B4';
+                ctx.beginPath();
+                ctx.arc(0, 0, item.width / 2, 0, Math.PI * 2);
+                ctx.fill();
+                
+            } else if (item.type === ItemTypes.SPREAD) {
+                // 拡散（紫の扇形）
+                ctx.fillStyle = '#9370DB';
+                ctx.beginPath();
+                ctx.arc(0, 0, item.width / 2, -Math.PI / 3, Math.PI / 3);
+                ctx.lineTo(0, 0);
+                ctx.closePath();
+                ctx.fill();
+                
+            } else if (item.type === ItemTypes.PENETRATE) {
+                // 貫通（金色の矢）
+                ctx.fillStyle = '#FFD700';
+                ctx.beginPath();
+                ctx.moveTo(0, -item.height / 2);
+                ctx.lineTo(-item.width / 4, -item.height / 4);
+                ctx.lineTo(-item.width / 6, -item.height / 4);
+                ctx.lineTo(-item.width / 6, item.height / 2);
+                ctx.lineTo(item.width / 6, item.height / 2);
+                ctx.lineTo(item.width / 6, -item.height / 4);
+                ctx.lineTo(item.width / 4, -item.height / 4);
+                ctx.closePath();
+                ctx.fill();
+            }
                 ctx.textAlign = 'center';
                 ctx.fillText('L', 0, 5);
                 
@@ -1134,7 +1272,7 @@ function checkCollisions() {
                 enemies[i].y + enemies[i].height > playerCenterY - hitboxSize / 2) {
                 
                 // シールド状態の場合は敵だけ消す
-                if (player.weaponType === 'shield') {
+                if (player.activeWeapons.has('shield')) {
                     // シールド効果音
                     try {
                         const shieldSound = new Audio('sounds/shield.mp3');
@@ -1235,7 +1373,7 @@ function checkCollisions() {
     }
 }
 
-// アイテム効果の適用
+// アイテム効果の適用（複数効果同時対応）
 function applyItemEffect(itemType) {
     switch(itemType) {
         case ItemTypes.HEALTH:
@@ -1252,10 +1390,9 @@ function applyItemEffect(itemType) {
             
         case ItemTypes.TRIPLE_SHOT:
             // 3方向攻撃（10秒間）
-            player.weaponType = 'triple';
-            player.weaponTimer = 600; // 60fps × 10秒
+            player.activeWeapons.add('triple');
+            player.weaponTimers['triple'] = 600; // 60fps × 10秒
             
-            // 武器変更エフェクト
             createEffect(EffectTypes.TEXT, 
                 player.x + player.width / 2, 
                 player.y - 20,
@@ -1265,10 +1402,9 @@ function applyItemEffect(itemType) {
             
         case ItemTypes.LASER:
             // レーザー攻撃（8秒間）
-            player.weaponType = 'laser';
-            player.weaponTimer = 480; // 60fps × 8秒
+            player.activeWeapons.add('laser');
+            player.weaponTimers['laser'] = 480; // 60fps × 8秒
             
-            // 武器変更エフェクト
             createEffect(EffectTypes.TEXT, 
                 player.x + player.width / 2, 
                 player.y - 20,
@@ -1278,14 +1414,85 @@ function applyItemEffect(itemType) {
             
         case ItemTypes.SHIELD:
             // シールド（12秒間）
-            player.weaponType = 'shield';
-            player.weaponTimer = 720; // 60fps × 12秒
+            player.activeWeapons.add('shield');
+            player.weaponTimers['shield'] = 720; // 60fps × 12秒
             
-            // シールドエフェクト
             createEffect(EffectTypes.TEXT, 
                 player.x + player.width / 2, 
                 player.y - 20,
                 { text: "シールド!", color: '#1E90FF', timer: 45 }
+            );
+            break;
+            
+        case ItemTypes.RAPID_FIRE:
+            // 連射速度アップ（15秒間）
+            player.fireRate = Math.min(player.fireRate + 0.5, 3.0); // 最大3倍まで
+            player.weaponTimers['rapid_fire'] = 900; // 60fps × 15秒
+            
+            createEffect(EffectTypes.TEXT, 
+                player.x + player.width / 2, 
+                player.y - 20,
+                { text: "連射アップ!", color: '#FF4500', timer: 45 }
+            );
+            break;
+            
+        case ItemTypes.SPEED_UP:
+            // 移動速度アップ（20秒間）
+            player.moveSpeed = Math.min(player.moveSpeed + 0.3, 2.0); // 最大2倍まで
+            player.weaponTimers['speed_up'] = 1200; // 60fps × 20秒
+            
+            createEffect(EffectTypes.TEXT, 
+                player.x + player.width / 2, 
+                player.y - 20,
+                { text: "スピードアップ!", color: '#00FF00', timer: 45 }
+            );
+            break;
+            
+        case ItemTypes.POWER_UP:
+            // 攻撃力アップ（25秒間）
+            player.bulletDamage = Math.min(player.bulletDamage + 0.5, 3.0); // 最大3倍まで
+            player.weaponTimers['power_up'] = 1500; // 60fps × 25秒
+            
+            createEffect(EffectTypes.TEXT, 
+                player.x + player.width / 2, 
+                player.y - 20,
+                { text: "パワーアップ!", color: '#FF0000', timer: 45 }
+            );
+            break;
+            
+        case ItemTypes.HOMING:
+            // ホーミング弾（12秒間）
+            player.activeWeapons.add('homing');
+            player.weaponTimers['homing'] = 720; // 60fps × 12秒
+            
+            createEffect(EffectTypes.TEXT, 
+                player.x + player.width / 2, 
+                player.y - 20,
+                { text: "ホーミング弾!", color: '#FF69B4', timer: 45 }
+            );
+            break;
+            
+        case ItemTypes.SPREAD:
+            // 拡散弾（10秒間）
+            player.activeWeapons.add('spread');
+            player.weaponTimers['spread'] = 600; // 60fps × 10秒
+            
+            createEffect(EffectTypes.TEXT, 
+                player.x + player.width / 2, 
+                player.y - 20,
+                { text: "拡散弾!", color: '#9370DB', timer: 45 }
+            );
+            break;
+            
+        case ItemTypes.PENETRATE:
+            // 貫通弾（15秒間）
+            player.activeWeapons.add('penetrate');
+            player.weaponTimers['penetrate'] = 900; // 60fps × 15秒
+            
+            createEffect(EffectTypes.TEXT, 
+                player.x + player.width / 2, 
+                player.y - 20,
+                { text: "貫通弾!", color: '#FFD700', timer: 45 }
             );
             break;
     }
@@ -1304,34 +1511,54 @@ function update() {
         }
     }
     
-    // 自動発射（弾を出っ放しにする）
+    // 自動発射（連射速度を考慮）
     player.autoShootTimer++;
-    if (player.autoShootTimer > 18) { // 18フレームごとに自動発射（元は12）
+    const fireInterval = Math.max(8, Math.floor(18 / player.fireRate)); // 連射速度に応じて調整
+    if (player.autoShootTimer > fireInterval) {
         shootBullet();
         player.autoShootTimer = 0;
     }
     
-    // 武器効果の時間制限
-    if (player.weaponTimer > 0) {
-        player.weaponTimer--;
-        if (player.weaponTimer <= 0) {
-            // 武器効果終了エフェクト
-            createEffect(EffectTypes.TEXT, 
-                player.x + player.width / 2, 
-                player.y - 20,
-                { text: "通常武器に戻りました", color: '#FFFFFF', timer: 45 }
-            );
-            
-            player.weaponType = 'normal'; // 通常武器に戻す
+    // 武器効果の時間制限（複数効果対応）
+    for (const [weaponType, timer] of Object.entries(player.weaponTimers)) {
+        if (timer > 0) {
+            player.weaponTimers[weaponType]--;
+            if (player.weaponTimers[weaponType] <= 0) {
+                // 武器効果終了
+                player.activeWeapons.delete(weaponType);
+                delete player.weaponTimers[weaponType];
+                
+                // 能力値をリセット（段階的に）
+                if (weaponType === 'rapid_fire') {
+                    player.fireRate = Math.max(1.0, player.fireRate - 0.5);
+                } else if (weaponType === 'speed_up') {
+                    player.moveSpeed = Math.max(1.0, player.moveSpeed - 0.3);
+                } else if (weaponType === 'power_up') {
+                    player.bulletDamage = Math.max(1.0, player.bulletDamage - 0.5);
+                }
+                
+                // 効果終了エフェクト
+                createEffect(EffectTypes.TEXT, 
+                    player.x + player.width / 2, 
+                    player.y - 20,
+                    { text: `${weaponType}効果終了`, color: '#FFFFFF', timer: 30 }
+                );
+            }
         }
     }
     
-    // プレイヤー移動（左右のみ、スマホ対応）
+    // normalが削除されていたら追加し直す
+    if (player.activeWeapons.size === 0) {
+        player.activeWeapons.add('normal');
+    }
+    
+    // プレイヤー移動（左右のみ、スマホ対応、移動速度倍率適用）
+    const actualSpeed = player.speed * player.moveSpeed;
     if ((keys['ArrowLeft'] || mobileControls.left) && player.x > 0) {
-        player.x -= player.speed;
+        player.x -= actualSpeed;
     }
     if ((keys['ArrowRight'] || mobileControls.right) && player.x < canvas.width - player.width) {
-        player.x += player.speed;
+        player.x += actualSpeed;
     }
     
     // 弾丸更新
@@ -1387,7 +1614,13 @@ function update() {
     
     // ボス出現条件（各周回で1000点に達したらボス出現）
     if (score >= 1000 && !boss && !bossDefeated) {
-        boss = new Boss(currentRound);
+        if (currentRound === 3) {
+            // 3周目は2体のボスを同時出現
+            boss = new Boss(currentRound, false); // 1体目
+            secondBoss = new Boss(currentRound, true); // 2体目
+        } else {
+            boss = new Boss(currentRound);
+        }
         bossMode = true;
         
         // ボス出現エフェクト
@@ -1397,6 +1630,8 @@ function update() {
         } else if (currentRound === 2) {
             bossText = "強化パイル出現！";
         } else if (currentRound === 3) {
+            bossText = "強化パイル2体が現れた！";
+        } else if (currentRound === 4) {
             bossText = "激おこパイルが現れた！";
         }
         
@@ -1547,22 +1782,36 @@ function draw() {
             ctx.font = '20px Comic Sans MS';
             ctx.fillText(`❤️ × ${player.health}/${player.maxHealth}`, 20, 40);
             
-            // 武器状態表示
-            if (player.weaponType !== 'normal') {
+            // 武器状態表示（複数効果対応）
+            if (player.activeWeapons.size > 1 || !player.activeWeapons.has('normal')) {
                 ctx.fillStyle = '#FFD700';
-                ctx.font = '16px Comic Sans MS';
-                const timeLeft = Math.ceil(player.weaponTimer / 60);
-                let weaponText = '';
+                ctx.font = '14px Comic Sans MS';
+                let yOffset = 65;
                 
-                if (player.weaponType === 'triple') {
-                    weaponText = `🔱 3WAY: ${timeLeft}s`;
-                } else if (player.weaponType === 'laser') {
-                    weaponText = `⚡ LASER: ${timeLeft}s`;
-                } else if (player.weaponType === 'shield') {
-                    weaponText = `🛡️ SHIELD: ${timeLeft}s`;
+                // アクティブな武器効果を表示
+                for (const [weaponType, timer] of Object.entries(player.weaponTimers)) {
+                    if (timer > 0) {
+                        const timeLeft = Math.ceil(timer / 60);
+                        let weaponText = '';
+                        
+                        switch(weaponType) {
+                            case 'triple': weaponText = `🔱 3WAY: ${timeLeft}s`; break;
+                            case 'laser': weaponText = `⚡ LASER: ${timeLeft}s`; break;
+                            case 'shield': weaponText = `🛡️ SHIELD: ${timeLeft}s`; break;
+                            case 'rapid_fire': weaponText = `🔥 RAPID: ${timeLeft}s`; break;
+                            case 'speed_up': weaponText = `💨 SPEED: ${timeLeft}s`; break;
+                            case 'power_up': weaponText = `💪 POWER: ${timeLeft}s`; break;
+                            case 'homing': weaponText = `🎯 HOMING: ${timeLeft}s`; break;
+                            case 'spread': weaponText = `🌟 SPREAD: ${timeLeft}s`; break;
+                            case 'penetrate': weaponText = `⚡ PIERCE: ${timeLeft}s`; break;
+                        }
+                        
+                        if (weaponText) {
+                            ctx.fillText(weaponText, 20, yOffset);
+                            yOffset += 18;
+                        }
+                    }
                 }
-                
-                ctx.fillText(weaponText, 20, 65);
             }
             
             // ボス出現予告
@@ -1578,6 +1827,8 @@ function draw() {
                 } else if (currentRound === 2) {
                     warningText = '強化パイル出現まで...';
                 } else if (currentRound === 3) {
+                    warningText = '強化パイル2体出現まで...';
+                } else if (currentRound === 4) {
                     warningText = '激おこパイル出現まで...';
                 }
                 
@@ -1796,8 +2047,12 @@ function restartGame() {
     player.x = canvas.width / 2;
     player.y = canvas.height - 80;
     player.health = 3;
-    player.weaponType = 'normal';
-    player.weaponTimer = 0;
+    player.activeWeapons = new Set(['normal']);
+    player.weaponTimers = {};
+    player.fireRate = 1.0;
+    player.moveSpeed = 1.0;
+    player.bulletDamage = 1.0;
+    player.bulletSpeed = 1.0;
     player.invincible = false;
     player.invincibleTimer = 0;
     player.autoShootTimer = 0; // 自動発射タイマーをリセット
