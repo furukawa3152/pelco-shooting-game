@@ -231,8 +231,8 @@ window.handleCanvasTouch = function() {
 
 // プレイヤー設定
 const player = {
-    x: canvas.width / 2,
-    y: canvas.height - 80,
+    x: 400, // canvas.width / 2の代わりに固定値
+    y: 520, // canvas.height - 80の代わりに固定値
     width: 60,
     height: 60,
     speed: 3, // 移動速度を下げる（元は4）
@@ -1171,8 +1171,9 @@ function drawEffects() {
 
 // 衝突判定
 function checkCollisions() {
-    // 弾丸と敵の衝突
+    // 弾丸と敵の衝突（貫通機能対応）
     for (let i = bullets.length - 1; i >= 0; i--) {
+        let bulletRemoved = false;
         for (let j = enemies.length - 1; j >= 0; j--) {
             if (bullets[i] && enemies[j] && enemies[j].type !== 'bossBullet' &&
                 bullets[i].x < enemies[j].x + enemies[j].width &&
@@ -1180,9 +1181,12 @@ function checkCollisions() {
                 bullets[i].y < enemies[j].y + enemies[j].height &&
                 bullets[i].y + bullets[i].height > enemies[j].y) {
                 
+                // ダメージを適用
+                const damage = bullets[i].damage || 1;
+                
                 // 敵のヘルスを減らす
                 if (enemies[j].health) {
-                    enemies[j].health--;
+                    enemies[j].health -= damage;
                     
                     // ダメージエフェクト
                     createEffect(EffectTypes.SPARKLE, 
@@ -1191,10 +1195,15 @@ function checkCollisions() {
                         { size: 15, timer: 10 }
                     );
                     
-                    // 敵がまだ生きている場合は弾だけ消す
+                    // 敵がまだ生きている場合
                     if (enemies[j].health > 0) {
-                        bullets.splice(i, 1);
-                        break;
+                        // 貫通弾でない場合は弾を削除
+                        if (!bullets[i].penetrate) {
+                            bullets.splice(i, 1);
+                            bulletRemoved = true;
+                            break;
+                        }
+                        continue; // 貫通弾の場合は次の敵をチェック
                     }
                 }
                 
@@ -1214,46 +1223,63 @@ function checkCollisions() {
                     console.log('効果音の再生に失敗しました');
                 }
                 
-                // 敵と弾を削除
+                // 敵を削除
                 enemies.splice(j, 1);
-                bullets.splice(i, 1);
+                
+                // 貫通弾でない場合は弾も削除
+                if (!bullets[i].penetrate) {
+                    bullets.splice(i, 1);
+                    bulletRemoved = true;
+                    break;
+                }
                 
                 // スコア加算
-                score += 100;
+                score += 10;
                 updateScore();
                 
                 // スコアエフェクト
                 createEffect(EffectTypes.TEXT, 
                     enemies[j] ? enemies[j].x + enemies[j].width / 2 : canvas.width / 2, 
                     enemies[j] ? enemies[j].y : canvas.height / 2,
-                    { text: "+100", color: '#FFFF00', timer: 30 }
+                    { text: "+10", color: '#FFFF00', timer: 30 }
                 );
                 
-                break;
+                // アイテムドロップ判定
+                spawnItem();
+            }
+        }
+        
+        // 弾丸が削除されていたらループを抜ける
+        if (bulletRemoved) break;
+    }
             }
         }
     }
     
-    // 弾丸とボスの衝突
-    if (boss) {
+    // 弾丸とボスの衝突（2体ボス対応）
+    const bosses = [boss, secondBoss].filter(b => b !== null);
+    
+    for (const currentBoss of bosses) {
         for (let i = bullets.length - 1; i >= 0; i--) {
             if (bullets[i] &&
-                bullets[i].x < boss.x + boss.width &&
-                bullets[i].x + bullets[i].width > boss.x &&
-                bullets[i].y < boss.y + boss.height &&
-                bullets[i].y + bullets[i].height > boss.y) {
+                bullets[i].x < currentBoss.x + currentBoss.width &&
+                bullets[i].x + bullets[i].width > currentBoss.x &&
+                bullets[i].y < currentBoss.y + currentBoss.height &&
+                bullets[i].y + bullets[i].height > currentBoss.y) {
                 
-                // レーザーは2倍ダメージ
-                const damage = bullets[i] && bullets[i].damage ? bullets[i].damage : 1;
+                // ダメージを適用
+                const damage = bullets[i].damage || 1;
                 
                 // ダメージを与える
                 for (let d = 0; d < damage; d++) {
-                    boss.takeDamage();
+                    currentBoss.takeDamage();
                 }
                 
-                // 弾を削除
-                bullets.splice(i, 1);
-                break;
+                // 貫通弾でない場合は弾を削除
+                if (!bullets[i].penetrate) {
+                    bullets.splice(i, 1);
+                    break;
+                }
             }
         }
     }
@@ -1561,18 +1587,67 @@ function update() {
         player.x += actualSpeed;
     }
     
-    // 弾丸更新
+    // 弾丸更新（ホーミング機能対応）
     for (let i = bullets.length - 1; i >= 0; i--) {
-        if (bullets[i].type === 'triple' && bullets[i].speedX !== undefined) {
-            // 3方向弾の動き
-            bullets[i].x += bullets[i].speedX;
-            bullets[i].y -= bullets[i].speedY;
-        } else {
-            // 通常弾とレーザーの動き
-            bullets[i].y -= bullets[i].speed;
+        const bullet = bullets[i];
+        
+        // ホーミング機能
+        if (bullet.homing && enemies.length > 0) {
+            // 最も近い敵を見つける
+            let closestEnemy = null;
+            let closestDistance = Infinity;
+            
+            for (const enemy of enemies) {
+                if (enemy.type !== 'bossBullet') { // ボスの弾は除外
+                    const dx = enemy.x + enemy.width / 2 - (bullet.x + bullet.width / 2);
+                    const dy = enemy.y + enemy.height / 2 - (bullet.y + bullet.height / 2);
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (distance < closestDistance) {
+                        closestDistance = distance;
+                        closestEnemy = enemy;
+                    }
+                }
+            }
+            
+            // 最も近い敵に向かって移動
+            if (closestEnemy && closestDistance < 200) { // 200ピクセル以内の敵を追尾
+                const dx = closestEnemy.x + closestEnemy.width / 2 - (bullet.x + bullet.width / 2);
+                const dy = closestEnemy.y + closestEnemy.height / 2 - (bullet.y + bullet.height / 2);
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance > 0) {
+                    const homingStrength = 0.3; // ホーミングの強さ
+                    bullet.speedX = (bullet.speedX || 0) + (dx / distance) * homingStrength;
+                    bullet.speedY = (bullet.speedY || bullet.speed) + (dy / distance) * homingStrength;
+                    
+                    // 速度を制限
+                    const maxSpeed = bullet.speed * 1.5;
+                    const currentSpeed = Math.sqrt(bullet.speedX * bullet.speedX + bullet.speedY * bullet.speedY);
+                    if (currentSpeed > maxSpeed) {
+                        bullet.speedX = (bullet.speedX / currentSpeed) * maxSpeed;
+                        bullet.speedY = (bullet.speedY / currentSpeed) * maxSpeed;
+                    }
+                }
+            }
         }
         
-        if (bullets[i].y < -10) {
+        // 弾丸の移動
+        if (bullet.type === 'triple' && bullet.speedX !== undefined) {
+            // 3方向弾の動き
+            bullet.x += bullet.speedX;
+            bullet.y -= bullet.speedY;
+        } else if (bullet.speedX !== undefined && bullet.speedY !== undefined) {
+            // ホーミング弾や拡散弾の動き
+            bullet.x += bullet.speedX;
+            bullet.y -= bullet.speedY;
+        } else {
+            // 通常弾とレーザーの動き
+            bullet.y -= bullet.speed;
+        }
+        
+        // 画面外の弾丸を削除
+        if (bullet.y < -10 || bullet.x < -50 || bullet.x > canvas.width + 50) {
             bullets.splice(i, 1);
         }
     }
@@ -1644,9 +1719,29 @@ function update() {
         console.log(`Boss appeared in round ${currentRound} at score ${score}`);
     }
     
-    // ボス更新
-    if (boss && !bossDefeated) {
-        boss.update();
+    // ボス更新（2体ボス対応）
+    if (!bossDefeated) {
+        if (boss) {
+            boss.update();
+        }
+        if (secondBoss) {
+            secondBoss.update();
+        }
+        
+        // 3周目の場合、両方のボスが倒されたかチェック
+        if (currentRound === 3) {
+            if ((!boss || boss.health <= 0) && (!secondBoss || secondBoss.health <= 0)) {
+                bossDefeated = true;
+                boss = null;
+                secondBoss = null;
+            }
+        } else {
+            // 通常の周回では1体のボスのみ
+            if (boss && boss.health <= 0) {
+                bossDefeated = true;
+                boss = null;
+            }
+        }
     }
     
     // 敵生成（確率を下げる）
@@ -1768,8 +1863,13 @@ function draw() {
             drawBullets();
             drawEffects();
             
-            if (boss && !bossDefeated) {
-                boss.draw();
+            if (!bossDefeated) {
+                if (boss) {
+                    boss.draw();
+                }
+                if (secondBoss) {
+                    secondBoss.draw();
+                }
             }
             
             // 現在の周回表示
@@ -2001,6 +2101,7 @@ function startNextRound() {
     currentRound++;
     bossDefeated = false;
     boss = null;
+    secondBoss = null;
     bossMode = false;
     gameOverTimer = 0;
     roundClearTimer = 0;
@@ -2044,7 +2145,7 @@ function restartGame() {
     score = 0;
     currentRound = 1; // 周回をリセット
     roundClearTimer = 0;
-    player.x = canvas.width / 2;
+    player.x = canvas.width / 2 - player.width / 2;
     player.y = canvas.height - 80;
     player.health = 3;
     player.activeWeapons = new Set(['normal']);
@@ -2061,6 +2162,7 @@ function restartGame() {
     items = [];
     effects = [];
     boss = null;
+    secondBoss = null;
     bossDefeated = false;
     bossMode = false;
     gameOverTimer = 0;
@@ -2080,6 +2182,10 @@ function restartGame() {
 function startGame() {
     if (!gameStarted) {
         gameStarted = true;
+        
+        // プレイヤーの位置を正しく設定
+        player.x = canvas.width / 2 - player.width / 2;
+        player.y = canvas.height - 80;
         
         // ボタンを確実に非表示にする
         try {
