@@ -1212,12 +1212,16 @@ function checkCollisions() {
                         if (!bullets[i].penetrate) {
                             bullets.splice(i, 1);
                             bulletRemoved = true;
-                            break;
+                            break; // 弾丸が削除されたので、この弾丸についてはこれ以上敵をチェックしない
                         }
+                        console.log(`Debug: Enemy ${j} took damage, health remaining: ${enemies[j].health}. Bullet penetrate: ${bullets[i].penetrate}`); // デバッグログ追加
                         continue; // 貫通弾の場合は次の敵をチェック
                     }
                 }
                 
+                // 敵が倒された場合 (health <= 0)
+                console.log(`Debug: Enemy ${j} defeated! Health: ${enemies[j].health}. Current score before add: ${score}. Bullet penetrate: ${bullets[i].penetrate}`); // デバッグログ追加
+
                 // 爆発エフェクト
                 createEffect(EffectTypes.EXPLOSION, 
                     enemies[j].x + enemies[j].width / 2, 
@@ -1234,29 +1238,36 @@ function checkCollisions() {
                     console.log('効果音の再生に失敗しました');
                 }
                 
+                // スコア加算
+                score += 10;
+                updateScore();
+
+                // スコアエフェクト表示のために敵の位置を保持
+                const defeatedEnemyX = enemies[j].x;
+                const defeatedEnemyY = enemies[j].y;
+                const defeatedEnemyWidth = enemies[j].width; // 新しく追加
+                const defeatedEnemyHeight = enemies[j].height; // 新しく追加
+
                 // 敵を削除
                 enemies.splice(j, 1);
-                
+
+                // スコアエフェクト
+                createEffect(EffectTypes.TEXT, 
+                    defeatedEnemyX + defeatedEnemyWidth / 2, // 修正
+                    defeatedEnemyY,
+                    { text: "+10", color: '#FFFF00', timer: 30 }
+                );
+
+                // アイテムドロップ判定
+                spawnItem();
+
                 // 貫通弾でない場合は弾も削除
                 if (!bullets[i].penetrate) {
                     bullets.splice(i, 1);
                     bulletRemoved = true;
-                    break;
+                    console.log(`Debug: Non-penetrating bullet ${i} removed after enemy defeated.`); // デバッグログ追加
+                    break; // 弾丸が削除されたので、この弾丸についてはこれ以上敵をチェックしない
                 }
-                
-                // スコア加算
-                score += 10;
-                updateScore();
-                
-                // スコアエフェクト
-                createEffect(EffectTypes.TEXT, 
-                    enemies[j] ? enemies[j].x + enemies[j].width / 2 : canvas.width / 2, 
-                    enemies[j] ? enemies[j].y : canvas.height / 2,
-                    { text: "+10", color: '#FFFF00', timer: 30 }
-                );
-                
-                // アイテムドロップ判定
-                spawnItem();
             }
         }
         
@@ -2261,6 +2272,11 @@ function startGame() {
             canvas.height / 2,
             { text: "ゲームスタート！", color: '#FFFFFF', size: 40, timer: 60 }
         );
+
+        // ゲーム開始時に初期の敵を生成
+        for (let i = 0; i < 3; i++) {
+            spawnEnemy();
+        }
     }
 }
 
